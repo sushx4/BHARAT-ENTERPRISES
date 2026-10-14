@@ -1,0 +1,489 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Bharat Enterprise | Vehicle Documents</title>
+    <meta name="description" content="Manage vehicle records, RC, insurance, PUC, fitness and permit documents.">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="logo">
+            <div class="logo-icon">BE</div>
+            <div>
+                <h2>BHARAT ENTERPRISE</h2>
+                <span>Vehicle Manager</span>
+            </div>
+        </div>
+
+        <nav>
+            <button type="button" class="nav-btn active"
+                onclick="showSection('dashboard')">
+                🏠 Dashboard
+            </button>
+
+            <button type="button" class="nav-btn"
+                onclick="showSection('vehicles')">
+                🚚 Vehicles
+            </button>
+
+            <button type="button" class="nav-btn"
+                onclick="openVehicleForm()">
+                ➕ Add Vehicle
+            </button>
+        </nav>
+
+        <div class="sidebar-bottom">
+            <p>© 2026 BHARAT ENTERPRISE</p>
+        </div>
+    </aside>
+
+
+    <!-- MAIN CONTENT -->
+    <main class="main">
+
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div>
+                <h1 id="pageTitle">Dashboard</h1>
+                <p>Manage your vehicle records and documents</p>
+            </div>
+
+            <div class="topbar-actions">
+                <button type="button" class="add-btn"
+                    onclick="openVehicleForm()">
+                    + Add Vehicle
+                </button>
+            </div>
+        </header>
+
+
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="section active">
+
+            <div class="cards">
+
+                <div class="card blue">
+                    <div>
+                        <span>Total Vehicles</span>
+                        <h2 id="totalVehicles">0</h2>
+                    </div>
+                    <div class="card-icon">🚚</div>
+                </div>
+
+                <div class="card green">
+                    <div>
+                        <span>Total Documents</span>
+                        <h2 id="totalDocuments">0</h2>
+                    </div>
+                    <div class="card-icon">📄</div>
+                </div>
+
+                <div class="card orange">
+                    <div>
+                        <span>Expiring Soon</span>
+                        <h2 id="expiringDocuments">0</h2>
+                    </div>
+                    <div class="card-icon">⚠️</div>
+                </div>
+
+                <div class="card red">
+                    <div>
+                        <span>Expired</span>
+                        <h2 id="expiredDocuments">0</h2>
+                    </div>
+                    <div class="card-icon">❌</div>
+                </div>
+
+            </div>
+
+            <!-- RECENT VEHICLES -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Recent Vehicles</h2>
+
+                    <button type="button"
+                        onclick="showSection('vehicles')"
+                        class="text-btn">
+                        View All →
+                    </button>
+                </div>
+
+                <div id="recentVehicles" class="vehicle-grid"></div>
+            </div>
+
+        </section>
+
+
+        <!-- VEHICLES SECTION -->
+        <section id="vehicles" class="section">
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>All Vehicles</h2>
+                        <p>Search and manage your registered vehicles.</p>
+                    </div>
+
+                    <button type="button" class="add-btn"
+                        onclick="openVehicleForm()">
+                        + Add Vehicle
+                    </button>
+                </div>
+
+                <div class="search-box">
+                    <input
+                        type="search"
+                        id="searchInput"
+                        placeholder="Search vehicle number or model..."
+                        oninput="renderVehicles()"
+                        aria-label="Search vehicles"
+                    >
+                </div>
+
+                <div id="vehicleList" class="vehicle-grid"></div>
+            </div>
+
+        </section>
+
+
+        <!-- ADD / EDIT VEHICLE FORM -->
+        <section id="vehicleFormSection" class="section">
+
+            <div class="form-panel">
+
+                <div class="form-header">
+                    <div>
+                        <h2 id="formTitle">Add New Vehicle</h2>
+                        <p>
+                            Add vehicle information and document links.
+                        </p>
+                    </div>
+
+                    <button type="button"
+                        class="close-btn"
+                        onclick="showSection('dashboard')"
+                        aria-label="Close form">
+                        ✕
+                    </button>
+                </div>
+
+
+                <form id="vehicleForm">
+
+                    <input type="hidden" id="vehicleId">
+
+                    <!-- VEHICLE INFORMATION -->
+                    <h3 class="document-title">Vehicle Information</h3>
+
+                    <div class="form-grid">
+
+                        <div class="input-group">
+                            <label for="vehicleNumber">
+                                Vehicle Number *
+                            </label>
+
+                            <input
+                                type="text"
+                                id="vehicleNumber"
+                                placeholder="e.g. GJ15AB1234"
+                                autocomplete="off"
+                                required
+                            >
+                        </div>
+
+                        <div class="input-group">
+                            <label for="vehicleModel">
+                                Vehicle Model
+                            </label>
+
+                            <input
+                                type="text"
+                                id="vehicleModel"
+                                placeholder="e.g. Tata 407"
+                            >
+                        </div>
+
+                        <div class="input-group">
+                            <label for="vehicleType">
+                                Vehicle Type
+                            </label>
+
+                            <select id="vehicleType">
+                                <option value="Truck">Truck</option>
+                                <option value="Car">Car</option>
+                                <option value="Van">Van</option>
+                                <option value="Pickup">Pickup</option>
+                                <option value="Tempo">Tempo</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="owner">Owner / Driver</label>
+
+                            <input
+                                type="text"
+                                id="owner"
+                                placeholder="Owner / Driver name"
+                            >
+                        </div>
+
+                    </div>
+
+
+                    <!-- DOCUMENTS -->
+                    <h3 class="document-title">Vehicle Documents</h3>
+
+                    <div class="document-grid">
+
+                        <!-- RC -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">📘</span>
+                                <h3>Registration Certificate (RC)</h3>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="rcLink">
+                                    Google Drive Link
+                                </label>
+
+                                <input
+                                    type="url"
+                                    id="rcLink"
+                                    placeholder="https://drive.google.com/..."
+                                >
+                            </div>
+
+                            <div class="input-group">
+                                <label for="rcValidity">
+                                    RC Validity
+                                </label>
+
+                                <select
+                                    id="rcValidity"
+                                    onchange="toggleRCExpiry()"
+                                >
+                                    <option value="expiry">
+                                        Expiry Date
+                                    </option>
+
+                                    <option value="lifetime">
+                                        Lifetime / No Expiry
+                                    </option>
+                                </select>
+                            </div>
+
+                            <div id="rcExpiryBox" class="input-group">
+                                <label for="rcExpiry">Expiry Date</label>
+
+                                <input
+                                    type="date"
+                                    id="rcExpiry"
+                                >
+                            </div>
+
+                            <p class="form-help">
+                                Select Lifetime / No Expiry if no expiry
+                                date applies to this RC.
+                            </p>
+                        </div>
+
+
+                        <!-- INSURANCE -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">🛡️</span>
+                                <h3>Insurance</h3>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="insuranceLink">
+                                    Google Drive Link
+                                </label>
+
+                                <input
+                                    type="url"
+                                    id="insuranceLink"
+                                    placeholder="https://drive.google.com/..."
+                                >
+                            </div>
+
+                            <div class="input-group">
+                                <label for="insuranceExpiry">
+                                    Expiry Date
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="insuranceExpiry"
+                                >
+                            </div>
+                        </div>
+
+
+                        <!-- PUC -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">🌿</span>
+                                <h3>Pollution Certificate (PUC)</h3>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="pucLink">
+                                    Google Drive Link
+                                </label>
+
+                                <input
+                                    type="url"
+                                    id="pucLink"
+                                    placeholder="https://drive.google.com/..."
+                                >
+                            </div>
+
+                            <div class="input-group">
+                                <label for="pucExpiry">
+                                    Expiry Date
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="pucExpiry"
+                                >
+                            </div>
+                        </div>
+
+
+                        <!-- FITNESS -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">✅</span>
+                                <h3>Fitness Certificate</h3>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="fitnessLink">
+                                    Google Drive Link
+                                </label>
+
+                                <input
+                                    type="url"
+                                    id="fitnessLink"
+                                    placeholder="https://drive.google.com/..."
+                                >
+                            </div>
+
+                            <div class="input-group">
+                                <label for="fitnessExpiry">
+                                    Expiry Date
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="fitnessExpiry"
+                                >
+                            </div>
+                        </div>
+
+
+                        <!-- PERMIT -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">📋</span>
+                                <h3>Permit</h3>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="permitLink">
+                                    Google Drive Link
+                                </label>
+
+                                <input
+                                    type="url"
+                                    id="permitLink"
+                                    placeholder="https://drive.google.com/..."
+                                >
+                            </div>
+
+                            <div class="input-group">
+                                <label for="permitExpiry">
+                                    Expiry Date
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="permitExpiry"
+                                >
+                            </div>
+                        </div>
+
+                    </div>
+
+
+                    <!-- FORM BUTTONS -->
+                    <div class="form-actions">
+                        <button
+                            type="button"
+                            class="cancel-btn"
+                            onclick="showSection('dashboard')"
+                        >
+                            Cancel
+                        </button>
+
+                        <button type="submit" class="save-btn">
+                            💾 Save Vehicle
+                        </button>
+                    </div>
+
+                </form>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- SUPABASE LIBRARY -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- YOUR JAVASCRIPT -->
+    <script src="script.js"></script>
+
+    <!-- RC LIFETIME / EXPIRY TOGGLE -->
+    <script>
+        function toggleRCExpiry() {
+            const validity = document.getElementById("rcValidity");
+            const expiryBox = document.getElementById("rcExpiryBox");
+            const expiryInput = document.getElementById("rcExpiry");
+
+            if (!validity || !expiryBox || !expiryInput) return;
+
+            const isLifetime = validity.value === "lifetime";
+
+            expiryBox.style.display = isLifetime ? "none" : "block";
+            expiryInput.disabled = isLifetime;
+
+            if (isLifetime) {
+                expiryInput.value = "";
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            toggleRCExpiry();
+        });
+    </script>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
+</body>
+</html>
