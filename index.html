@@ -1,0 +1,477 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Bharat Enterprise | Vehicle Documents</title>
+    <meta name="description" content="Manage vehicle records, RC, insurance, PUC, fitness and permit documents.">
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="logo">
+            <div class="logo-icon">BE</div>
+            <div>
+                <h2>BHARAT ENTERPRISE</h2>
+                <span>Vehicle Manager</span>
+            </div>
+        </div>
+
+        <nav>
+            <button type="button" class="nav-btn active" onclick="showSection('dashboard')">🏠 Dashboard</button>
+            <button type="button" class="nav-btn" onclick="showSection('vehicles')">🚚 Total Vehicles <span id="navVehicleCount" class="nav-count">0</span></button>
+            <button type="button" class="nav-btn" onclick="showSection('expirySection', 'soon')">⚠️ Expiring Soon <span id="navExpiryCount" class="nav-count">0</span></button>
+            <button type="button" class="nav-btn" onclick="showSection('expirySection', 'expired')">❌ Expired <span id="navExpiredCount" class="nav-count">0</span></button>
+            <button type="button" class="nav-btn" onclick="openVehicleForm()">➕ Add Vehicle</button>
+        </nav>
+
+        <div class="sidebar-bottom">
+            <p>© 2026 BHARAT ENTERPRISE</p>
+        </div>
+    </aside>
+
+
+    <!-- MAIN CONTENT -->
+    <main class="main">
+
+        <!-- TOPBAR -->
+        <header class="topbar">
+            <div>
+                <h1 id="pageTitle">Dashboard</h1>
+                <p>Manage your vehicle records and documents</p>
+            </div>
+
+            <div class="topbar-actions">
+                <button type="button" class="add-btn"
+                    onclick="openVehicleForm()">
+                    + Add Vehicle
+                </button>
+            </div>
+        </header>
+
+
+        <!-- DASHBOARD -->
+        <section id="dashboard" class="section active">
+            <div class="dashboard-welcome">
+                <div class="welcome-copy">
+                    <span class="welcome-eyebrow">BHARAT ENTERPRISE · FLEET OVERVIEW</span>
+                    <h2>Vehicle Document Dashboard</h2>
+                    <p>Track your fleet, keep documents organised, and check upcoming expiries in one place.</p>
+                    <div class="welcome-actions">
+                        <button type="button" class="welcome-primary" onclick="openVehicleForm()">＋ Add Vehicle</button>
+                        <button type="button" class="welcome-secondary" onclick="showSection('vehicles')">View All Vehicles <span aria-hidden="true">→</span></button>
+                    </div>
+                </div>
+                <div class="welcome-art" aria-hidden="true"><span class="welcome-art-circle">🚚</span><span class="welcome-art-label">FLEET<br>MANAGEMENT</span></div>
+            </div>
+
+            <div class="dashboard-search-panel">
+                <div class="dashboard-search-heading">
+                    <span class="dashboard-search-icon" aria-hidden="true">⌕</span>
+                    <div><h3>Find a vehicle quickly</h3><p>Search by vehicle number, model, type, or owner/driver.</p></div>
+                </div>
+                <div class="dashboard-search-control">
+                    <input type="search" id="dashboardSearchInput" placeholder="e.g. TG07X0719, Tata 407, owner name..." oninput="searchDashboardVehicles()" aria-label="Search vehicles from dashboard">
+                    <button type="button" onclick="searchDashboardVehicles(true)">Search Vehicles</button>
+                </div>
+                <div id="dashboardSearchResults" class="vehicle-grid dashboard-search-results" aria-live="polite" hidden></div>
+            </div>
+
+            <div class="dashboard-section-heading">
+                <div><h2>Fleet at a glance</h2><p>Select any card to see its detailed list.</p></div>
+                <span class="live-pill"><span></span> Live overview</span>
+            </div>
+            <div class="cards dashboard-stat-cards">
+                <button type="button" class="card blue card-pressable redesigned-stat" onclick="showSection('vehicles')">
+                    <span class="stat-icon-box">🚚</span><span class="stat-copy"><span class="stat-label">Total Vehicles</span><strong id="totalVehicles">0</strong><small>Registered vehicles <b>→</b></small></span>
+                </button>
+                <div class="card green redesigned-stat">
+                    <span class="stat-icon-box">📄</span><span class="stat-copy"><span class="stat-label">Total Documents</span><strong id="totalDocuments">0</strong><small>Tracked documents</small></span>
+                </div>
+                <button type="button" class="card orange card-pressable redesigned-stat" onclick="showSection('expirySection', 'soon')">
+                    <span class="stat-icon-box">⏳</span><span class="stat-copy"><span class="stat-label">Expiring Soon</span><strong id="expiringDocuments">0</strong><small>Next 7 days <b>→</b></small></span>
+                </button>
+                <button type="button" class="card red card-pressable redesigned-stat" onclick="showSection('expirySection', 'expired')">
+                    <span class="stat-icon-box">⚠️</span><span class="stat-copy"><span class="stat-label">Expired Documents</span><strong id="expiredDocuments">0</strong><small>Needs attention <b>→</b></small></span>
+                </button>
+            </div>
+
+            <div class="dashboard-lower-grid">
+                <div class="dashboard-info-panel">
+                    <div class="info-panel-icon">🗂️</div><div><h3>Keep every document ready</h3><p>Open a vehicle record to view, download, or update its RC, Insurance, PUC, Fitness and Permit documents.</p></div>
+                </div>
+                <div class="dashboard-alert-panel">
+                    <div><span class="alert-kicker">DOCUMENT CHECK</span><h3>Review expiry status</h3><p>Documents expiring within 7 days appear in Expiring Soon.</p></div>
+                    <button type="button" onclick="showSection('expirySection', 'soon')">Check now <span aria-hidden="true">→</span></button>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- VEHICLES SECTION -->
+        <section id="vehicles" class="section">
+
+            <div class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>All Vehicles</h2>
+                        <p>Search and manage your registered vehicles.</p>
+                    </div>
+
+                    <div class="vehicle-header-actions">
+                        <button type="button" class="secondary-btn" onclick="addListedVehicles()">
+                            + Add Listed Numbers
+                        </button>
+                        <button type="button" class="add-btn" onclick="openVehicleForm()">
+                            + Add Vehicle
+                        </button>
+                    </div>
+                </div>
+
+                <div class="search-box">
+                    <input
+                        type="search"
+                        id="searchInput"
+                        placeholder="Search vehicle number or model..."
+                        oninput="renderVehicles()"
+                        aria-label="Search vehicles"
+                    >
+                </div>
+
+                <div id="vehicleList" class="vehicle-grid"></div>
+            </div>
+
+        </section>
+
+
+        <!-- EXPIRY DETAILS SECTION -->
+        <section id="expirySection" class="section">
+            <div class="panel">
+                <div class="panel-header">
+                    <div>
+                        <h2>Expired & Expiring Documents</h2>
+                        <p>Shows document name, vehicle number, expiry date and remaining days. Expiring soon means within 7 days.</p>
+                    </div>
+                    <button type="button" class="secondary-btn" onclick="renderExpiryList()">↻ Refresh</button>
+                </div>
+                <div id="expirySummary" class="expiry-summary"></div>
+                <div id="expiryList" class="expiry-list"></div>
+            </div>
+        </section>
+
+        <!-- ADD / EDIT VEHICLE FORM -->
+        <section id="vehicleFormSection" class="section">
+
+            <div class="form-panel">
+
+                <div class="form-header">
+                    <div>
+                        <h2 id="formTitle">Add New Vehicle</h2>
+                        <p>
+                            Add vehicle information, upload documents and set expiry dates.
+                        </p>
+                    </div>
+
+                    <button type="button"
+                        class="close-btn"
+                        onclick="showSection('dashboard')"
+                        aria-label="Close form">
+                        ✕
+                    </button>
+                </div>
+
+
+                <form id="vehicleForm">
+
+                    <input type="hidden" id="vehicleId">
+
+                    <!-- VEHICLE INFORMATION -->
+                    <h3 class="document-title">Vehicle Information</h3>
+
+                    <div class="form-grid">
+
+                        <div class="input-group">
+                            <label for="vehicleNumber">
+                                Vehicle Number *
+                            </label>
+
+                            <input
+                                type="text"
+                                id="vehicleNumber"
+                                placeholder="e.g. GJ15AB1234"
+                                autocomplete="off"
+                                required
+                            >
+                        </div>
+
+                        <div class="input-group">
+                            <label for="vehicleModel">
+                                Vehicle Model
+                            </label>
+
+                            <input
+                                type="text"
+                                id="vehicleModel"
+                                placeholder="e.g. Tata 407"
+                            >
+                        </div>
+
+                        <div class="input-group">
+                            <label for="vehicleType">
+                                Vehicle Type
+                            </label>
+
+                            <select id="vehicleType">
+                                <option value="Truck">Truck</option>
+                                <option value="Car">Car</option>
+                                <option value="Van">Van</option>
+                                <option value="Pickup">Pickup</option>
+                                <option value="Tempo">Tempo</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="owner">Owner / Driver</label>
+
+                            <input
+                                type="text"
+                                id="owner"
+                                placeholder="Owner / Driver name"
+                            >
+                        </div>
+
+                    </div>
+
+
+                    <!-- DOCUMENTS -->
+                    <h3 class="document-title">Vehicle Documents</h3>
+
+                    <div class="document-grid">
+
+                        <!-- RC -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">📘</span>
+                                <h3>Registration Certificate (RC)</h3>
+                            </div>
+
+                            <div class="input-group upload-group">
+                                <label for="rcFile">Upload RC (PDF/JPG/PNG, max 10 MB)</label>
+                                <input type="file" id="rcFile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                                <input type="hidden" id="rcStoragePath">
+                                <input type="hidden" id="rcFileName">
+                                <p class="upload-status" id="rcUploadStatus" aria-live="polite"></p>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="rcValidity">
+                                    RC Validity
+                                </label>
+
+                                <select
+                                    id="rcValidity"
+                                    onchange="toggleRCExpiry()"
+                                >
+                                    <option value="expiry">
+                                        Expiry Date
+                                    </option>
+
+                                    <option value="lifetime">
+                                        Lifetime / No Expiry
+                                    </option>
+                                </select>
+                            </div>
+
+                            <div id="rcExpiryBox" class="input-group">
+                                <label for="rcExpiry">Expiry Date</label>
+
+                                <input
+                                    type="date"
+                                    id="rcExpiry"
+                                >
+                            </div>
+
+                            <p class="form-help">
+                                Select Lifetime / No Expiry if no expiry
+                                date applies to this RC.
+                            </p>
+                        </div>
+
+
+                        <!-- INSURANCE -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">🛡️</span>
+                                <h3>Insurance</h3>
+                            </div>
+
+                            <div class="input-group upload-group">
+                                <label for="insuranceFile">Upload Insurance (PDF/JPG/PNG, max 10 MB)</label>
+                                <input type="file" id="insuranceFile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                                <input type="hidden" id="insuranceStoragePath">
+                                <input type="hidden" id="insuranceFileName">
+                                <p class="upload-status" id="insuranceUploadStatus" aria-live="polite"></p>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="insuranceExpiry">
+                                    Expiry Date
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="insuranceExpiry"
+                                >
+                            </div>
+                        </div>
+
+
+                        <!-- PUC -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">🌿</span>
+                                <h3>Pollution Certificate (PUC)</h3>
+                            </div>
+
+                            <div class="input-group upload-group">
+                                <label for="pucFile">Upload PUC (PDF/JPG/PNG, max 10 MB)</label>
+                                <input type="file" id="pucFile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                                <input type="hidden" id="pucStoragePath">
+                                <input type="hidden" id="pucFileName">
+                                <p class="upload-status" id="pucUploadStatus" aria-live="polite"></p>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="pucExpiry">
+                                    Expiry Date
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="pucExpiry"
+                                >
+                            </div>
+                        </div>
+
+
+                        <!-- FITNESS -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">✅</span>
+                                <h3>Fitness Certificate</h3>
+                            </div>
+
+                            <div class="input-group upload-group">
+                                <label for="fitnessFile">Upload Fitness (PDF/JPG/PNG, max 10 MB)</label>
+                                <input type="file" id="fitnessFile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                                <input type="hidden" id="fitnessStoragePath">
+                                <input type="hidden" id="fitnessFileName">
+                                <p class="upload-status" id="fitnessUploadStatus" aria-live="polite"></p>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="fitnessExpiry">
+                                    Expiry Date
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="fitnessExpiry"
+                                >
+                            </div>
+                        </div>
+
+
+                        <!-- PERMIT -->
+                        <div class="document-card">
+                            <div class="document-top">
+                                <span class="document-icon">📋</span>
+                                <h3>Permit</h3>
+                            </div>
+
+                            <div class="input-group upload-group">
+                                <label for="permitFile">Upload Permit (PDF/JPG/PNG, max 10 MB)</label>
+                                <input type="file" id="permitFile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png">
+                                <input type="hidden" id="permitStoragePath">
+                                <input type="hidden" id="permitFileName">
+                                <p class="upload-status" id="permitUploadStatus" aria-live="polite"></p>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="permitExpiry">
+                                    Expiry Date
+                                </label>
+
+                                <input
+                                    type="date"
+                                    id="permitExpiry"
+                                >
+                            </div>
+                        </div>
+
+                    </div>
+
+
+                    <!-- FORM BUTTONS -->
+                    <div class="form-actions">
+                        <button
+                            type="button"
+                            class="cancel-btn"
+                            onclick="showSection('dashboard')"
+                        >
+                            Cancel
+                        </button>
+
+                        <button type="submit" class="save-btn">
+                            💾 Save Vehicle
+                        </button>
+                    </div>
+
+                </form>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- SUPABASE LIBRARY -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- YOUR JAVASCRIPT -->
+    <script src="script.js"></script>
+
+    <!-- RC LIFETIME / EXPIRY TOGGLE -->
+    <script>
+        function toggleRCExpiry() {
+            const validity = document.getElementById("rcValidity");
+            const expiryBox = document.getElementById("rcExpiryBox");
+            const expiryInput = document.getElementById("rcExpiry");
+
+            if (!validity || !expiryBox || !expiryInput) return;
+
+            const isLifetime = validity.value === "lifetime";
+
+            expiryBox.style.display = isLifetime ? "none" : "block";
+            expiryInput.disabled = isLifetime;
+
+            if (isLifetime) {
+                expiryInput.value = "";
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            toggleRCExpiry();
+        });
+    </script>
+
+</body>
+</html>
