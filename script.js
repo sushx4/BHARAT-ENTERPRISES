@@ -16,6 +16,9 @@ let vehicles = [];
 let currentUser = null;
 let expiryFilter = "all";
 
+// ============================================
+// 1. LOGIN AND SIGNUP SCREEN
+// ============================================
 function setupLoginScreen() {
     const screen = document.createElement("div");
     screen.id = "loginScreen";
@@ -28,8 +31,12 @@ function setupLoginScreen() {
         const email = document.getElementById("loginEmail").value.trim();
         const password = document.getElementById("loginPassword").value;
         const message = document.getElementById("loginMessage");
-        message.textContent = "Logging in...";
-        try { const { error } = await db.auth.signInWithPassword({ email, password }); if (error) { message.textContent = error.message; } } catch (error) { message.textContent = error.message; }
+        message.textContent = "Checking login and approval status...";
+        try {
+            const { error } = await db.auth.signInWithPassword({ email, password });
+            if (error) { message.textContent = error.message; return; }
+            message.textContent = "Login successful. Checking admin approval...";
+        } catch (error) { message.textContent = error.message || "Login failed."; }
     });
     document.getElementById("signupButton").addEventListener("click", async () => {
         const email = document.getElementById("loginEmail").value.trim();
@@ -39,28 +46,53 @@ function setupLoginScreen() {
         message.textContent = "Creating account...";
         try {
             const { data, error } = await db.auth.signUp({ email, password });
-            if (error) { message.textContent = error.message; } else if (!data.session) { message.textContent = "Check your email to confirm your account, then log in."; } else { message.textContent = "Account created."; }
+            if (error) { message.textContent = error.message; }
+            else if (!data.session) { message.textContent = "Request submitted. Confirm your email if asked. Your account will work after the administrator approves it in Supabase."; }
+            else { message.textContent = "Account created. Waiting for administrator approval."; }
         } catch (error) { message.textContent = error.message; }
     });
 }
+
+// ============================================
+// 2. SHOW APPLICATION AFTER LOGIN
+// ============================================
 function showApp() {
     document.getElementById("loginScreen")?.remove();
     document.querySelectorAll(".sidebar, .main").forEach(element => { element.style.display = ""; });
     setupDocumentUploadInputs();
     loadVehicles();
 }
+
+// ============================================
+// 3. LOAD VEHICLES - SHARED
+// ============================================
 async function loadVehicles() {
     if (!currentUser) return;
-    const { data, error } = await db.from("vehicles").select("id, data");
-    if (error) { console.error("Load vehicles error:", error); alert("Vehicles load nahi hue: " + error.message); return; }
-    vehicles = (data || []).map(row => ({ ...row.data, id: row.id }));
-    updateDashboard(); renderVehicles();
+    const { data, error } = await db.from("vehicles").select("id, data, user_id").order("updated_at", { ascending: false });
+    if (error) { console.error("Could not load shared vehicles:", error); alert("Could not load vehicles: " + error.message); return; }
+    vehicles = (data || []).map(row => ({ ...row.data, id: row.id, _ownerUserId: row.user_id }));
+    updateDashboard();
+    renderVehicles();
 }
+
+// ============================================
+// 4. SAVE VEHICLE - SHARED
+// ============================================
 async function saveVehicleOnline(vehicle) {
-    if (!currentUser) { throw new Error("Please log in first."); }
-    const { error } = await db.from("vehicles").upsert({ id: vehicle.id, user_id: currentUser.id, data: vehicle, updated_at: new Date().toISOString() }, { onConflict: "id" });
-    if (error) { throw error; }
+    if (!currentUser) throw new Error("Please log in first.");
+    const payload = { ...vehicle }; delete payload._ownerUserId;
+    const now = new Date().toISOString();
+    const { data: existing, error: lookupError } = await db.from("vehicles").select("id, user_id").eq("id", vehicle.id).maybeSingle();
+    if (lookupError) throw lookupError;
+    let result;
+    if (existing) { result = await db.from("vehicles").update({ data: payload, updated_at: now }).eq("id", vehicle.id); }
+    else { result = await db.from("vehicles").insert({ id: vehicle.id, user_id: currentUser.id, data: payload, updated_at: now }); }
+    if (result.error) throw result.error;
 }
+
+// ============================================
+// DOCUMENT UPLOAD / DOWNLOAD
+// ============================================
 function setupDocumentUploadInputs() {
     ["rc", "insurance", "puc", "fitness", "permit"].forEach(docKey => {
         const input = document.getElementById(`${docKey}File`);
@@ -88,12 +120,21 @@ async function uploadVehicleDocument(docKey, input) {
         input.value = "";
     } catch (error) { if (status) status.textContent = `Upload failed: ${error.message}`; else alert("Upload failed: " + error.message); } finally { input.disabled = false; }
 }
+
+// ============================================
+// FIXED: DOWNLOAD WITH APPROVAL CHECK + SHARED ACCESS
+// ============================================
 async function getVehicleDocumentBlob(storagePath) {
-    if (!currentUser) throw new Error("Please log in first.");
-    if (!storagePath || !storagePath.startsWith(`${currentUser.id}/`)) throw new Error("Invalid document path.");
+    if (!currentUser) { throw new Error("Please log in first."); }
+    if (!storagePath) { throw new Error("Document path is missing."); }
+    const { data: access, error: accessError } = await db.from("user_access").select("approved").eq("user_id", currentUser.id).maybeSingle();
+    if (accessError) { throw new Error("Could not verify account approval."); }
+    if (!access || access.approved !== true) { throw new Error("Your account is not approved."); }
     const { data, error } = await db.storage.from(DOCUMENTS_BUCKET).download(storagePath);
-    if (error) throw error; return data;
+    if (error) { throw error; }
+    return data;
 }
+
 async function viewVehicleDocument(storagePath, fileName) {
     const tab = window.open("about:blank", "_blank");
     try {
@@ -126,17 +167,15 @@ async function addListedVehicles() {
     const existing = new Set(vehicles.map(v => (v.vehicleNumber || "").toUpperCase()));
     const missing = LISTED_VEHICLE_NUMBERS.filter(number => !existing.has(number));
     if (!missing.length) { alert("All listed vehicle numbers are already in your account."); return; }
-    const confirmed = confirm(`Add ${missing.length} missing vehicle records to this logged-in account?`);
-    if (!confirmed) return;
-    const added = [];
+    const confirmed = confirm(`Add ${missing.length} missing vehicle records?`);
+    if (!confirmed) return; const added = [];
     try {
         for (const number of missing) {
             const vehicle = { id: crypto.randomUUID(), vehicleNumber: number, vehicleModel: "", vehicleType: "Truck", owner: "", documents: { rc: { link: "", storagePath: "", fileName: "", validity: "expiry", expiry: "" }, insurance: { link: "", storagePath: "", fileName: "", expiry: "" }, puc: { link: "", storagePath: "", fileName: "", expiry: "" }, fitness: { link: "", storagePath: "", fileName: "", expiry: "" }, permit: { link: "", storagePath: "", fileName: "", expiry: "" } }, createdAt: new Date().toISOString() };
             await saveVehicleOnline(vehicle); added.push(vehicle);
         }
-        vehicles.push(...added); updateDashboard(); renderVehicles();
-        alert(`${added.length} vehicle records added.`);
-    } catch (error) { vehicles.push(...added); updateDashboard(); renderVehicles(); alert(`Added ${added.length} records before an error: ${error.message}`); }
+        vehicles.push(...added); updateDashboard(); renderVehicles(); alert(`${added.length} vehicle records added.`);
+    } catch (error) { vehicles.push(...added); updateDashboard(); renderVehicles(); alert(`Added ${added.length} records before error: ${error.message}`); }
 }
 function getExpiryItems() {
     const items = []; const docLabels = { rc: "RC", insurance: "Insurance", puc: "PUC", fitness: "Fitness", permit: "Permit" };
@@ -208,108 +247,36 @@ function searchDashboardVehicles(openAll = false) {
 }
 
 // ============================================
-// BHARAT ENTERPRISE - VEHICLE CARDS
+// VEHICLE CARDS - COMPACT + EXPANDABLE + SHARE
 // ============================================
-
 function renderVehicles() {
-    const container = document.getElementById("vehicleList");
-    if (!container) return;
+    const container = document.getElementById("vehicleList"); if (!container) return;
     const search = (document.getElementById("searchInput")?.value || "").toLowerCase().trim();
-    const filtered = vehicles.filter(vehicle =>
-        [vehicle.vehicleNumber, vehicle.vehicleModel, vehicle.vehicleType, vehicle.owner].some(value => String(value || "").toLowerCase().includes(search))
-    );
+    const filtered = vehicles.filter(vehicle => [vehicle.vehicleNumber, vehicle.vehicleModel, vehicle.vehicleType, vehicle.owner].some(value => String(value || "").toLowerCase().includes(search)));
     container.innerHTML = filtered.length ? filtered.map(createVehicleCard).join("") : `<div class="empty"><h3>No vehicles found</h3><p>No matching vehicles available.</p></div>`;
 }
-
 function createVehicleCard(vehicle) {
-    const docs = vehicle.documents || {};
-    const rc = docs.rc || {};
-    const id = escapeAttribute(vehicle.id);
+    const docs = vehicle.documents || {}; const rc = docs.rc || {}; const id = escapeAttribute(vehicle.id);
     const rcExpiry = rc.validity === "lifetime" ? "Lifetime" : (rc.expiry || "Not added");
-    return `
-        <article class="vehicle-card vehicle-card-compact" id="vehicle-card-${id}">
-            <div class="vehicle-header" onclick="toggleVehicleCard('${id}')" style="cursor:pointer;">
-                <div>
-                    <div class="vehicle-number">${escapeHTML(vehicle.vehicleNumber || "Vehicle")}</div>
-                    <div class="vehicle-model">${escapeHTML(vehicle.vehicleModel || "Model not added")}</div>
-                </div>
-                <span class="status ${getVehicleStatusClass(vehicle)}">${escapeHTML(getVehicleStatus(vehicle))}</span>
-            </div>
-            <div class="vehicle-card-hint" onclick="toggleVehicleCard('${id}')" style="cursor:pointer;font-size:12px;color:#64748b;margin-top:8px;">Tap to view details ＋</div>
-            <div class="vehicle-card-details" hidden>
-                <hr style="margin:12px 0;">
-                <p><strong>Vehicle Number:</strong> ${escapeHTML(vehicle.vehicleNumber || "Not added")}</p>
-                <p><strong>Model:</strong> ${escapeHTML(vehicle.vehicleModel || "Not added")}</p>
-                <p><strong>Type:</strong> ${escapeHTML(vehicle.vehicleType || "Not added")}</p>
-                <p><strong>Owner:</strong> ${escapeHTML(vehicle.owner || "Not added")}</p>
-                <h4 style="margin-top:12px;">Document Expiry</h4>
-                <p><strong>RC:</strong> ${escapeHTML(rcExpiry)}</p>
-                <p><strong>Insurance:</strong> ${escapeHTML(docs.insurance?.expiry || "Not added")}</p>
-                <p><strong>PUC:</strong> ${escapeHTML(docs.puc?.expiry || "Not added")}</p>
-                <p><strong>Fitness:</strong> ${escapeHTML(docs.fitness?.expiry || "Not added")}</p>
-                <p><strong>Permit:</strong> ${escapeHTML(docs.permit?.expiry || "Not added")}</p>
-                <div class="documents">
-                    ${documentButton("RC", rc.link, rcExpiry, rc.storagePath, rc.fileName)}
-                    ${documentButton("Insurance", docs.insurance?.link, docs.insurance?.expiry, docs.insurance?.storagePath, docs.insurance?.fileName)}
-                    ${documentButton("PUC", docs.puc?.link, docs.puc?.expiry, docs.puc?.storagePath, docs.puc?.fileName)}
-                    ${documentButton("Fitness", docs.fitness?.link, docs.fitness?.expiry, docs.fitness?.storagePath, docs.fitness?.fileName)}
-                    ${documentButton("Permit", docs.permit?.link, docs.permit?.expiry, docs.permit?.storagePath, docs.permit?.fileName)}
-                </div>
-            </div>
-            <div class="vehicle-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-                <button type="button" class="edit-btn" onclick="editVehicle('${id}')">✏️ Edit</button>
-                <button type="button" class="delete-btn" onclick="deleteVehicle('${id}')">🗑️ Delete</button>
-                <button type="button" class="share-btn" onclick="shareVehicle('${id}')" style="padding:8px 12px;border:0;border-radius:6px;cursor:pointer;background:#0f766e;color:white;">↗ Share</button>
-            </div>
-        </article>
-    `;
+    return `<article class="vehicle-card vehicle-card-compact" id="vehicle-card-${id}" onclick="toggleVehicleCard('${id}')" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleVehicleCard('${id}')}" style="cursor:pointer;"><div class="vehicle-header"><div><div class="vehicle-number">${escapeHTML(vehicle.vehicleNumber || "Vehicle number not added")}</div><div class="vehicle-model">${escapeHTML(vehicle.vehicleModel || "Vehicle")}</div></div><span class="status ${getVehicleStatusClass(vehicle)}">${getVehicleStatus(vehicle)}</span></div><div class="vehicle-card-hint" style="font-size:12px;color:#64748b;margin-top:8px;">Tap card to view full details <span class="vehicle-expand-arrow">＋</span></div><div class="vehicle-card-details" hidden onclick="event.stopPropagation()"><div class="vehicle-info">🚚 ${escapeHTML(vehicle.vehicleType || "Type not added")}<br>👤 ${escapeHTML(vehicle.owner || "Owner not added")}</div><div class="vehicle-summary" style="font-size:13px;line-height:1.7;margin:10px 0;"><div><strong>RC:</strong> ${escapeHTML(rcExpiry)}</div><div><strong>Insurance:</strong> ${escapeHTML(docs.insurance?.expiry || "Not added")}</div><div><strong>PUC:</strong> ${escapeHTML(docs.puc?.expiry || "Not added")}</div><div><strong>Fitness:</strong> ${escapeHTML(docs.fitness?.expiry || "Not added")}</div><div><strong>Permit:</strong> ${escapeHTML(docs.permit?.expiry || "Not added")}</div></div><div class="documents">${documentButton("RC", rc.link, rcExpiry, rc.storagePath, rc.fileName)}${documentButton("Insurance", docs.insurance?.link, docs.insurance?.expiry, docs.insurance?.storagePath, docs.insurance?.fileName)}${documentButton("PUC", docs.puc?.link, docs.puc?.expiry, docs.puc?.storagePath, docs.puc?.fileName)}${documentButton("Fitness", docs.fitness?.link, docs.fitness?.expiry, docs.fitness?.storagePath, docs.fitness?.fileName)}${documentButton("Permit", docs.permit?.link, docs.permit?.expiry, docs.permit?.storagePath, docs.permit?.fileName)}</div></div><div class="vehicle-actions" onclick="event.stopPropagation()" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;"><button type="button" class="edit-btn" onclick="editVehicle('${id}')">✏️ Edit</button><button type="button" class="delete-btn" onclick="deleteVehicle('${id}')">🗑️ Delete</button><button type="button" class="share-btn" onclick="shareVehicle('${id}')" style="padding:8px 12px;border:0;border-radius:6px;cursor:pointer;background:#0f766e;color:#fff;">↗ Share</button></div></article>`;
 }
-
 function toggleVehicleCard(id) {
-    const card = document.getElementById(`vehicle-card-${id}`);
-    if (!card) return;
-    const details = card.querySelector(".vehicle-card-details");
-    const hint = card.querySelector(".vehicle-card-hint");
-    if (!details) return;
-    details.hidden = !details.hidden;
-    if (hint) { hint.textContent = details.hidden ? "Tap to view details ＋" : "Tap to hide details −"; }
+    const card = document.getElementById(`vehicle-card-${id}`); if (!card) return;
+    const details = card.querySelector('.vehicle-card-details'); const hint = card.querySelector('.vehicle-card-hint');
+    if (!details) return; const willOpen = details.hidden; details.hidden = !willOpen; card.classList.toggle('vehicle-card-expanded', willOpen);
+    if (hint) { hint.innerHTML = willOpen ? 'Tap card header to hide details <span class="vehicle-expand-arrow">−</span>' : 'Tap card to view full details <span class="vehicle-expand-arrow">＋</span>'; }
 }
-
 async function shareVehicle(id) {
     const vehicle = vehicles.find(item => String(item.id) === String(id));
-    if (!vehicle) { alert("Vehicle not found. Please refresh."); return; }
-    const docs = vehicle.documents || {};
-    function expiryText(doc) {
-        if (!doc) return "Not added";
-        if (doc.validity === "lifetime") { return "Lifetime / No Expiry"; }
-        return doc.expiry || "Not added";
-    }
-    const text = [
-        "BHARAT ENTERPRISE - VEHICLE DETAILS", "",
-        `Vehicle Number: ${vehicle.vehicleNumber || "Not added"}`,
-        `Model: ${vehicle.vehicleModel || "Not added"}`,
-        `Type: ${vehicle.vehicleType || "Not added"}`,
-        `Owner: ${vehicle.owner || "Not added"}`,
-        `Status: ${getVehicleStatus(vehicle)}`, "",
-        `RC: ${expiryText(docs.rc)}`,
-        `Insurance: ${expiryText(docs.insurance)}`,
-        `PUC: ${expiryText(docs.puc)}`,
-        `Fitness: ${expiryText(docs.fitness)}`,
-        `Permit: ${expiryText(docs.permit)}`
-    ].join("\n");
+    if (!vehicle) { alert('Vehicle not found. Please refresh and try again.'); return; }
+    const docs = vehicle.documents || {}; const expiryText = value => value?.validity === 'lifetime' ? 'Lifetime / No Expiry' : (value?.expiry || 'Not added');
+    const text = ['BHARAT ENTERPRISE — VEHICLE DETAILS', `Vehicle Number: ${vehicle.vehicleNumber || 'Not added'}`, `Model: ${vehicle.vehicleModel || 'Not added'}`, `Type: ${vehicle.vehicleType || 'Not added'}`, `Owner: ${vehicle.owner || 'Not added'}`, `Status: ${getVehicleStatus(vehicle)}`, `RC: ${expiryText(docs.rc)}`, `Insurance: ${expiryText(docs.insurance)}`, `PUC: ${expiryText(docs.puc)}`, `Fitness: ${expiryText(docs.fitness)}`, `Permit: ${expiryText(docs.permit)}`].join('\n');
     try {
-        if (navigator.share) { await navigator.share({ title: `Vehicle ${vehicle.vehicleNumber || ""}`, text: text }); }
-        else if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text);
-            alert("Is vehicle ki details copy ho gayi hain. Ab WhatsApp ya kisi message mein paste karke share karo.");
-        } else { window.prompt("Is vehicle ki details copy karo:", text); }
-    } catch (error) { if (error.name !== "AbortError") { console.error("Share error:", error); alert("Share nahi ho paya. Dobara try karo."); } }
+        if (navigator.share) { await navigator.share({ title: `Vehicle ${vehicle.vehicleNumber || ''}`, text }); }
+        else if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); alert('Is vehicle ka data copy ho gaya. Ab WhatsApp ya message mein paste karke share kar sakte ho.'); }
+        else { window.prompt('Is vehicle ka data copy karke share karo:', text); }
+    } catch (error) { if (error?.name !== 'AbortError') { console.error('Vehicle share failed:', error); window.prompt('Is vehicle ka data copy karke share karo:', text); } }
 }
-
-// ============================================
-// DOCUMENT BUTTONS + OTHER HELPERS
-// ============================================
-
 function documentButton(name, link, expiry, storagePath = "", fileName = "") {
     if (!storagePath) return `<button class="doc-btn disabled" disabled>${name} — Not uploaded</button>`;
     const title = expiry ? (name === "RC" && expiry === "Lifetime / No Expiry" ? expiry : "Expiry: " + expiry) : "";
@@ -317,11 +284,7 @@ function documentButton(name, link, expiry, storagePath = "", fileName = "") {
 }
 function editVehicle(id) {
     const vehicle = vehicles.find(item => item.id === id); if (!vehicle) return;
-    document.getElementById("vehicleId").value = vehicle.id;
-    document.getElementById("vehicleNumber").value = vehicle.vehicleNumber || "";
-    document.getElementById("vehicleModel").value = vehicle.vehicleModel || "";
-    document.getElementById("vehicleType").value = vehicle.vehicleType || "";
-    document.getElementById("owner").value = vehicle.owner || "";
+    document.getElementById("vehicleId").value = vehicle.id; document.getElementById("vehicleNumber").value = vehicle.vehicleNumber || ""; document.getElementById("vehicleModel").value = vehicle.vehicleModel || ""; document.getElementById("vehicleType").value = vehicle.vehicleType || ""; document.getElementById("owner").value = vehicle.owner || "";
     const docs = vehicle.documents || {};
     for (const name of ["rc", "insurance", "puc", "fitness", "permit"]) {
         const doc = docs[name] || {}; const linkInput = document.getElementById(name + "Link"); const expiryInput = document.getElementById(name + "Expiry");
@@ -335,7 +298,7 @@ function editVehicle(id) {
 }
 async function deleteVehicle(id) {
     const vehicle = vehicles.find(item => item.id === id); if (!vehicle || !confirm(`Delete vehicle ${vehicle.vehicleNumber}?`)) { return; }
-    const { error } = await db.from("vehicles").delete().eq("id", id).eq("user_id", currentUser.id);
+    const { error } = await db.from("vehicles").delete().eq("id", id);
     if (error) { alert("Delete failed: " + error.message); return; }
     vehicles = vehicles.filter(item => item.id !== id); updateDashboard(); renderVehicles();
 }
@@ -367,6 +330,20 @@ function escapeAttribute(value) { return String(value ?? "").replace(/&/g, "&amp
 setupLoginScreen();
 db.auth.onAuthStateChange((event, session) => {
     currentUser = session?.user || null;
-    if (currentUser) { showApp(); }
-    else { vehicles = []; document.querySelectorAll(".sidebar, .main").forEach(element => { element.style.display = "none"; }); if (!document.getElementById("loginScreen")) { setupLoginScreen(); } }
+    setTimeout(async () => {
+        const message = document.getElementById("loginMessage");
+        if (!currentUser) {
+            vehicles = [];
+            document.querySelectorAll(".sidebar, .main").forEach(element => { element.style.display = "none"; });
+            if (!document.getElementById("loginScreen")) setupLoginScreen();
+            return;
+        }
+        const userId = currentUser.id;
+        const { data: access, error } = await db.from("user_access").select("approved").eq("user_id", userId).maybeSingle();
+        if (error || !access || access.approved !== true) {
+            if (message) { message.textContent = error ? "Could not verify approval. Please try again later." : "Your account is pending approval. Please contact the Bharat Enterprise administrator."; }
+            await db.auth.signOut(); return;
+        }
+        showApp();
+    }, 0);
 });
